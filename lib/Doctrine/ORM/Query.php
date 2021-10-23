@@ -8,6 +8,7 @@ use Doctrine\Common\Cache\Cache;
 use Doctrine\Common\Cache\Psr6\CacheAdapter;
 use Doctrine\Common\Cache\Psr6\DoctrineProvider;
 use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Util\ClassUtils;
 use Doctrine\DBAL\Cache\QueryCacheProfile;
 use Doctrine\DBAL\LockMode;
 use Doctrine\DBAL\Types\Type;
@@ -454,11 +455,23 @@ final class Query extends AbstractQuery
 
         $processedValue = $this->processParameterValue($value);
 
+        if ($originalValue === $processedValue) {
+            $type = $parameter->getType();
+        }elseif (is_object($value) && $this->_em->getMetadataFactory()->hasMetadataFor(ClassUtils::getClass($value))) {
+            $class = $this->_em->getClassMetadata(ClassUtils::getClass($value));
+
+            if ($class->isIdentifierComposite) {
+                throw ORMInvalidArgumentException::invalidCompositeIdentifier();
+            }
+
+            $type = $class->getTypeOfField($class->getIdentifierFieldNames()[0]);
+        } else {
+            $type = ParameterTypeInferer::inferType($processedValue);
+        }
+
         return [
             $processedValue,
-            $originalValue === $processedValue
-                ? $parameter->getType()
-                : ParameterTypeInferer::inferType($processedValue),
+            $type,
         ];
     }
 
